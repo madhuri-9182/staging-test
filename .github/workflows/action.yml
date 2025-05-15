@@ -16,13 +16,17 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
+      - name: Activate virtual environment and Install dependencies
         run: |
+          cd /staging
+          git pull origin main
           python -m venv venv
           source venv/bin/activate
           pip install -r requirements.txt
 
       - name: Run application
         run: |
-          python3 manage.py migrate
+          cd staging
+          source venv/bin/activate
+          python manage.py migrate
           sudo systemctl restart gunicorn
