@@ -18,7 +18,8 @@ jobs:
 
       - name: Activate virtual environment and Install dependencies
         run: |
-          cd /staging
+          cd /home/ubuntu/staging-test
+
           git pull origin main
           python -m venv venv
           source venv/bin/activate
@@ -26,7 +27,7 @@ jobs:
 
       - name: Run application
         run: |
-          cd staging
+          cd /home/ubuntu/staging-test
           source venv/bin/activate
           python manage.py migrate
           sudo systemctl restart gunicorn
