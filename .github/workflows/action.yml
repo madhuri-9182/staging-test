@@ -33,4 +33,4 @@ jobs:
           cd /home/ubuntu/staging-test
           source venv/bin/activate
           python manage.py migrate
-          sudo systemctl restart gunicorn
+          nohup python manage.py runserver 0.0.0.0:8000 > server.log 2>&1 &
