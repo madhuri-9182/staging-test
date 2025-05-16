@@ -17,9 +17,13 @@ jobs:
           python-version: '3.12'
 
       - name: Activate virtual environment and Install dependencies
-        run: |
+        run: | 
           cd /home/ubuntu/staging-test
-
+          ls -la
+          rm -rf python
+          cd /home/ubuntu/staging-test
+          mkdir python
+          cd /home/ubuntu/staging-test/python
           git pull origin main
           python -m venv venv
           source venv/bin/activate
@@ -27,7 +31,7 @@ jobs:
 
       - name: Run application
         run: |
-          cd /home/ubuntu/staging-test
+          cd /home/ubuntu/staging-test/python
           source venv/bin/activate
           python manage.py migrate
           sudo systemctl restart gunicorn
