@@ -30,7 +30,7 @@ jobs:
 
       - name: Run application
         run: |
-          cd /home/ubuntu/staging-test/python
+          cd /home/ubuntu/staging-test
           source venv/bin/activate
           python manage.py migrate
           sudo systemctl restart gunicorn
