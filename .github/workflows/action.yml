@@ -31,6 +31,7 @@ jobs:
           python -m venv venv
           source venv/bin/activate
           pip install -r requirements.txt
+          '
 
       - name: Run application
         run: |
@@ -44,3 +45,4 @@ jobs:
           python manage.py check
           sudo systemctl restart gunicorn celery celery-beat
           systemctl status gunicorn celery celery-beat
+          '
