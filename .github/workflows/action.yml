@@ -24,7 +24,8 @@ jobs:
 
       - name: Activate virtual environment and Install dependencies
         run: |
-          sudo -u ubuntu /home/ubuntu/staging-test
+          sudo -u ubuntu bash -c '
+          cd /home/ubuntu/staging-test
           git checkout main
           git pull origin main
           python -m venv venv
@@ -33,7 +34,8 @@ jobs:
 
       - name: Run application
         run: |
-          sudo -u ubuntu /home/ubuntu/staging-test
+          sudo -u ubuntu bash -c '
+          cd /home/ubuntu/staging-test
           set -a
           source .env
           set +a
