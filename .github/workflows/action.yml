@@ -44,5 +44,9 @@ jobs:
         run: |
           cd /home/ubuntu/staging-test
           source venv/bin/activate
+          export DJANGO_SETTINGS_MODULE=hiringdogbackend.settings
           python manage.py migrate
-          nohup python manage.py runserver 0.0.0.0:8000 > server.log 2>&1 &
+          sudo systemctl restart gunicorn celery celery-beat
+          systemctl status gunicorn celery celery-beat
+
+       # nohup python manage.py runserver 0.0.0.0:8000 > server.log 2>&1 &
