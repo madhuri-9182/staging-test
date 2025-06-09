@@ -24,7 +24,7 @@ jobs:
 
       - name: Run deployment script
         run: |
-          cd /home/ubuntu/action-runner
+          cd /home/ubuntu/actions-runner
           chmod +x ./run.sh
           ./run.sh
 
