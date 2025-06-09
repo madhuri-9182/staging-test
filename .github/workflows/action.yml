@@ -22,11 +22,11 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Run deployment script
-        run: |
-          cd /home/ubuntu/actions-runner
-          chmod +x ./run.sh
-          ./run.sh
+     # - name: Run deployment script
+     #   run: |
+     #     cd /home/ubuntu/actions-runner
+     #     chmod +x ./run.sh
+     #     ./run.sh
 
       - name: Activate virtual environment and Install dependencies
         run: | 
