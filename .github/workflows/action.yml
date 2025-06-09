@@ -17,27 +17,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12'
-
-      - name: Activate virtual environment and Install dependencies
-        run: | 
-          cd /home/ubuntu/staging-test
-          git pull origin main
-          python -m venv venv
-          source venv/bin/activate
-          pip install -r requirements.txt
-
-      - name: Run application
+      - name: Deploy as ubuntu user
         run: |
-          cd /home/ubuntu/staging-test
-          set -a
-          source .env
-          set +a
-          source venv/bin/activate
-          python manage.py migrate
-          python manage.py check
-          sudo systemctl restart gunicorn celery celery-beat
-          systemctl status gunicorn celery celery-beat
+          sudo -u ubuntu /home/ubuntu/deploy_staging.sh
