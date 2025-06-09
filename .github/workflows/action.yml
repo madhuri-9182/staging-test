@@ -24,11 +24,6 @@ jobs:
 
       - name: Activate virtual environment and Install dependencies
         run: | 
-          cd /home/ubuntu/
-          ls -la
-          rm -rf staging-test
-          git clone https://github.com/madhuri-9182/staging-test.git
-          
           cd /home/ubuntu/staging-test
           git pull origin main
           python -m venv venv
@@ -38,7 +33,6 @@ jobs:
       - name: Run application
         run: |
           cd /home/ubuntu/staging-test
-          python -m venv venv
           source venv/bin/activate
           python manage.py migrate
           python manage.py check
