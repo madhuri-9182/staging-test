@@ -41,8 +41,9 @@ jobs:
           source .env
           set +a
           source venv/bin/activate
-          python manage.py migrate
+          python manage.py migrate --noinput   
           python manage.py check
           sudo systemctl restart gunicorn celery celery-beat
-          systemctl status gunicorn celery celery-beat
+          systemctl status gunicorn celery celery-beat --no-pager
           '
+          
