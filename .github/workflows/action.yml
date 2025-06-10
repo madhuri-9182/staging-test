@@ -20,7 +20,7 @@ jobs:
     
       - name: Run deployment script on VM
         run: |
-          sudo -u ubuntu ./home/ubuntu/release-timestamp.sh
+          sudo -u ubuntu bash /home/ubuntu/release-timestamp.sh
 
       - name: Check service status
         run: |
