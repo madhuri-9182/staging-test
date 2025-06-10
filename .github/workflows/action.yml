@@ -17,33 +17,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12'
-
-      - name: Activate virtual environment and Install dependencies
+    
+      - name: Run deployment script on VM
         run: |
-          sudo -u ubuntu bash -c '
-          cd /home/ubuntu/staging-test
-          git checkout main
-          git pull origin main
-          python -m venv venv
-          source venv/bin/activate
-          pip install -r requirements.txt
-          '
+          sudo -u ubuntu bash /home/ubuntu/timestamp-release.sh
 
-      - name: Run application
+      - name: Check service status
         run: |
-          sudo -u ubuntu bash -c '
-          cd /home/ubuntu/staging-test
-          set -a
-          source .env
-          set +a
-          source venv/bin/activate
-          python manage.py migrate --noinput   
-          python manage.py check
-          sudo systemctl restart gunicorn celery celery-beat
-          systemctl status gunicorn celery celery-beat --no-pager
-          '
-          
+          systemctl status gunicorn --no-pager
+          systemctl status celery --no-pager
+          systemctl status celery-beat --no-pager    
