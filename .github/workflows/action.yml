@@ -26,4 +26,5 @@ jobs:
         run: |
           systemctl status gunicorn --no-pager
           systemctl status celery --no-pager
-          systemctl status celery-beat --no-pager    
+          systemctl status celery-beat --no-pager
+          systemctl status rabbitmq-server --no-pager
