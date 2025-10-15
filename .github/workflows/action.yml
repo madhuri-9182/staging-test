@@ -1,7 +1,7 @@
 name: Auto Deploy to MIG (Image-Based)
 on:
   push:
-    branches: [test]
+    branches: ['test']
 env:
   PROJECT_ID: dynamic-now-438707-c1
   MIG_NAME: hiringdog-mig
