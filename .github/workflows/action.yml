@@ -1,29 +1,191 @@
-name: Deploy to EC2 via Self-hosted Runner
-
+name: Auto Deploy to MIG (Image-Based)
 on:
   push:
-    branches: [ test ]
+    branches: [test]
+env:
+  PROJECT_ID: dynamic-now-438707-c1
+  MIG_NAME: hiringdog-mig
+  ZONE: asia-south1-b
 
 jobs:
-  deploy:
-    runs-on: self-hosted
-    timeout-minutes: 15
-    concurrency:
-      group: deploy-prod
-      cancel-in-progress: true
+  gce-image-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        token_format: 'access_token'
+        workload_identity_provider: 'projects/568722140219/locations/global/workloadIdentityPools/github-pool/providers/github'
+        service_account: 'github-actions@dynamic-now-438707-c1.iam.gserviceaccount.com'
+        
+    - name: Set up gcloud CLI
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: dynamic-now-438707-c1
+        
+    - name: Setup Packer
+      uses: hashicorp/setup-packer@main
+      
+    - name: Create deployment archive
+      run: |
+        # Create tar archive with all your code
+        set +e
+        tar -czf app.tar.gz \
+          --exclude='.git*' \
+          --exclude='node_modules' \
+          --exclude='__pycache__' \
+          --exclude='*.pyc' \
+          --exclude='.env*' \
+          --exclude='*.log' \
+          --exclude='venv' \
+          --exclude='app.tar.gz' \
+          .
+        
+        if [ -f app.tar.gz ] && [ -s app.tar.gz ]; then
+          echo "✅ Archive created successfully"
+          ls -lh app.tar.gz
+          set -e
+        else
+          echo "❌ Failed to create archive"
+          exit 1
+        fi
+      
+    - name: Build Custom Image
+      run: |
+        SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-8)
+        IMAGE_NAME="hiringdog-$(date +%y%m%d%H%M%S)-${SHORT_SHA}"
+        
+        echo "Building image: $IMAGE_NAME"
+        packer init .
+        packer build \
+          -var "project_id=$PROJECT_ID" \
+          -var "image_name=$IMAGE_NAME" \
+          -var "app_version=${{ github.sha }}" \
+          packer-template.pkr.hcl
+        echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+        
+    - name: Create new Instance Template
+      run: |
+        TEMPLATE_NAME=hiringdog-template-$(date +%y%m%d%H%M%S)
+        gcloud compute instance-templates create $TEMPLATE_NAME \
+          --machine-type=e2-medium \
+          --image=$IMAGE_NAME \
+          --image-project=$PROJECT_ID \
+          --tags=http-server,https-server \
+          --boot-disk-size=20GB \
+          --boot-disk-type=pd-balanced \
+          --network-interface=network-tier=PREMIUM,subnet=projects/$PROJECT_ID/regions/asia-south1/subnetworks/default \
+          --service-account=default \
+          --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append \
+          --metadata=startup-script='#!/bin/bash
+            systemctl start hiringdog
+            systemctl start nginx
+            sleep 15
+            curl -f http://localhost/health || exit 1
+          '
+        echo "TEMPLATE_NAME=$TEMPLATE_NAME" >> $GITHUB_ENV
 
-    
-      - name: Run deployment script on VM
-        run: |
-          sudo -u ubuntu bash /home/ubuntu/release-timestamp.sh
-
-      - name: Check service status
-        run: |
-          systemctl status gunicorn --no-pager
-          systemctl status celery --no-pager
-          systemctl status celery-beat --no-pager    
+    - name: Check if MIG exists and create if needed
+      run: |
+        # Check if MIG exists
+        if ! gcloud compute instance-groups managed describe $MIG_NAME --zone=$ZONE --quiet >/dev/null 2>&1; then
+          echo "MIG $MIG_NAME does not exist. Creating it..."
+          
+          # Create the MIG (NO HEALTH CHECK)
+          gcloud compute instance-groups managed create $MIG_NAME \
+            --base-instance-name=hiringdog \
+            --size=1 \
+            --template=$TEMPLATE_NAME \
+            --zone=$ZONE
+          
+          # Configure auto-scaling
+          gcloud compute instance-groups managed set-autoscaling $MIG_NAME \
+            --zone=$ZONE \
+            --max-num-replicas=3 \
+            --min-num-replicas=1 \
+            --target-cpu-utilization=0.60
+          
+          echo "MIG created successfully!"
+        else
+          echo "MIG $MIG_NAME already exists. Proceeding with update..."
+        fi
+        
+    - name: Update MIG with new template
+      run: |
+        gcloud compute instance-groups managed set-instance-template $MIG_NAME \
+          --template=$TEMPLATE_NAME \
+          --zone=$ZONE
+          
+    - name: Rolling Update MIG
+      run: |
+        gcloud compute instance-groups managed rolling-action start-update $MIG_NAME \
+          --version=template=$TEMPLATE_NAME \
+          --zone=$ZONE \
+          --max-surge=1 \
+          --max-unavailable=0
+          
+    - name: Wait for Rollout
+      run: |
+        gcloud compute instance-groups managed wait-until $MIG_NAME \
+          --version-target-reached \
+          --zone=$ZONE \
+          --timeout=900
+          
+    - name: Verify Deployment
+      run: |
+        echo "=== MIG Instance Status ==="
+        gcloud compute instance-groups managed list-instances $MIG_NAME \
+          --zone=$ZONE \
+          --format="table(name,status,instanceStatus)"
+          
+        echo "=== Getting instance external IP ==="
+        INSTANCE_NAME=$(gcloud compute instance-groups managed list-instances $MIG_NAME \
+          --zone=$ZONE \
+          --format="value(name)" | head -n1)
+        
+        echo "Found instance: $INSTANCE_NAME"
+        
+        if [ ! -z "$INSTANCE_NAME" ]; then
+          EXTERNAL_IP=$(gcloud compute instances describe $INSTANCE_NAME \
+            --zone=$ZONE \
+            --format="value(networkInterfaces[0].accessConfigs[0].natIP)")
+          echo "Instance: $INSTANCE_NAME"
+          echo "External IP: $EXTERNAL_IP"
+          
+          # Test the health endpoint
+          if [ ! -z "$EXTERNAL_IP" ]; then
+            echo "Testing health endpoint..."
+            curl -f "http://$EXTERNAL_IP/health" || echo "Health check failed"
+          else
+            echo "No external IP found - instance might not have finished starting"
+          fi
+        else
+          echo "No instances found in MIG"
+        fi
+          
+    - name: Cleanup Old Images
+      run: |
+        echo "Cleaning up old images (keeping 5 most recent)..."
+        gcloud compute images list \
+          --filter="family=hiringdog-app" \
+          --format="value(name)" \
+          --sort-by="~creationTimestamp" \
+          | tail -n +6 \
+          | xargs -r -I {} gcloud compute images delete {} --quiet || echo "No old images to cleanup"
+          
+    - name: Cleanup Old Templates
+      run: |
+        echo "Cleaning up old instance templates (keeping 5 most recent)..."
+        gcloud compute instance-templates list \
+          --filter="name~hiringdog-template-*" \
+          --format="value(name)" \
+          --sort-by="~creationTimestamp" \
+          | tail -n +6 \
+          | xargs -r -I {} gcloud compute instance-templates delete {} --quiet || echo "No old templates to cleanup"
