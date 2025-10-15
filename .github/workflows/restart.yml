@@ -1,0 +1,95 @@
+name: Manual Service Restart
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to restart'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - gunicorn
+          - celery
+          - celery-beat
+          - redis
+          - rabbitmq
+          - all
+      reason:
+        description: 'Reason for restart'
+        required: true
+        default: 'Manual trigger via GitHub Actions'
+
+jobs:
+  restart:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Restart Services
+        run: |
+          echo "Restarting ${{ github.event.inputs.service }} - ${{ github.event.inputs.reason }}"
+          
+          case "${{ github.event.inputs.service }}" in
+            "gunicorn")
+              sudo systemctl restart gunicorn
+              sleep 3
+              systemctl is-active --quiet gunicorn || { echo "❌ Gunicorn restart failed"; exit 1; }
+              echo "✅ Gunicorn restarted successfully"
+              ;;
+            "celery")
+              sudo systemctl restart celery celery-beat
+              sleep 5
+              systemctl is-active --quiet celery && systemctl is-active --quiet celery-beat || { echo "❌ Celery restart failed"; exit 1; }
+              echo "✅ Celery services restarted successfully"
+              ;;
+            "celery-beat")
+              sudo systemctl restart celery-beat
+              sleep 3
+              systemctl is-active --quiet celery-beat || { echo "❌ Celery Beat restart failed"; exit 1; }
+              echo "✅ Celery Beat restarted successfully"
+              ;;
+            "redis")
+              sudo systemctl restart redis-server
+              sleep 3
+              systemctl is-active --quiet redis-server || { echo "❌ Redis restart failed"; exit 1; }
+              echo "✅ Redis restarted successfully"
+              ;;
+            "rabbitmq")
+              sudo systemctl restart rabbitmq-server
+              sleep 10
+              systemctl is-active --quiet rabbitmq-server || { echo "❌ RabbitMQ restart failed"; exit 1; }
+              echo "✅ RabbitMQ restarted successfully"
+              ;;
+            "all")
+              echo "Restarting all services in order..."
+              sudo systemctl restart redis-server
+              sleep 3
+              sudo systemctl restart rabbitmq-server
+              sleep 10
+              sudo systemctl restart celery celery-beat
+              sleep 5
+              sudo systemctl restart gunicorn
+              sleep 3
+              
+              # Verify all services
+              services=("redis-server" "rabbitmq-server" "celery" "celery-beat" "gunicorn")
+              failed_services=()
+              
+              for service in "${services[@]}"; do
+                if ! systemctl is-active --quiet "$service"; then
+                  failed_services+=("$service")
+                fi
+              done
+              
+              if [ ${#failed_services[@]} -eq 0 ]; then
+                echo "✅ All services restarted successfully"
+              else
+                echo "❌ Some services failed: ${failed_services[*]}"
+                exit 1
+              fi
+              ;;
+          esac
+          echo "📊 Final service status:"
+          sudo systemctl status gunicorn celery celery-beat redis-server rabbitmq-server --no-pager --lines=1
